@@ -22,6 +22,8 @@ export default function MatrixTable({
   activeProcess,
   updatedCells,
   invalidCells,
+  badgeLabel = 'Matrix',
+  badgeTone = 'neutral',
 }) {
   const updatedCellSet = new Set(updatedCells);
   const invalidCellSet = new Set(invalidCells);
@@ -30,9 +32,10 @@ export default function MatrixTable({
     <section className="table-card">
       <div className="section-heading">
         <div>
-          <p className="section-kicker">Matrix View</p>
+          <p className="section-kicker">{editable ? 'Input Matrix' : 'Derived Output'}</p>
           <h2>{title}</h2>
         </div>
+        <span className={`mini-pill mini-pill--${badgeTone}`}>{badgeLabel}</span>
       </div>
       <p className="table-description">{description}</p>
 
@@ -53,7 +56,12 @@ export default function MatrixTable({
               return (
                 <tr
                   key={`${matrixKey}-row-${rowIndex}`}
-                  className={isActiveRow ? 'matrix-table__row matrix-table__row--active' : 'matrix-table__row'}
+                  className={[
+                    'matrix-table__row',
+                    isActiveRow ? 'matrix-table__row--active' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                 >
                   <td className="matrix-table__label">P{rowIndex}</td>
                   {Array.from({ length: cols }, (_, columnIndex) => {

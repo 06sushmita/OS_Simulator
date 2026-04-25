@@ -40,34 +40,96 @@ function formatFinish(finish) {
   return finish.map((done, processIndex) => `P${processIndex}:${done ? 'T' : 'F'}`).join('  ');
 }
 
+function buildResourceChecks(needRow, work) {
+  return needRow.map((needValue, resourceIndex) => ({
+    resourceIndex,
+    need: needValue,
+    work: work[resourceIndex],
+    satisfied: needValue <= work[resourceIndex],
+    shortfall: Math.max(0, needValue - work[resourceIndex]),
+  }));
+}
+
+function buildExecutionExplanation(processIndex, resourceChecks, release) {
+  const checks = resourceChecks
+    .map(check => `R${check.resourceIndex}: ${check.need} <= ${check.work}`)
+    .join(', ');
+
+  return `P${processIndex} can run because every Need entry is within Work (${checks}). When it finishes, it releases [${release.join(', ')}].`;
+}
+
+function buildBlockedExplanation(processIndex, blockedBy) {
+  const blockers = blockedBy
+    .map(check => `R${check.resourceIndex} needs ${check.need} but only ${check.work} is available`)
+    .join('; ');
+
+  return `P${processIndex} stays blocked because ${blockers}.`;
+}
+
 export function runSafetyAlgorithm({ allocation, maximum, available }) {
   const processCount = allocation.length;
   const need = calculateNeed(maximum, allocation);
   const work = [...available];
   const finish = Array.from({ length: processCount }, () => false);
   const steps = [];
+  const evaluations = [];
   const safeSequence = [];
 
+  let pass = 1;
   let progressed = true;
 
   while (safeSequence.length < processCount && progressed) {
     progressed = false;
 
     for (let processIndex = 0; processIndex < processCount; processIndex += 1) {
-      if (finish[processIndex]) {
-        continue;
-      }
-
-      const canExecute = need[processIndex].every(
-        (needValue, resourceIndex) => needValue <= work[resourceIndex]
-      );
-
-      if (!canExecute) {
-        continue;
-      }
-
       const workBefore = [...work];
       const finishBefore = [...finish];
+
+      if (finish[processIndex]) {
+        evaluations.push({
+          kind: 'skip',
+          pass,
+          process: processIndex,
+          title: `P${processIndex} is already complete`,
+          summary: `Skip P${processIndex} because it already finished in an earlier pass.`,
+          explanation: `The algorithm revisits processes in order. P${processIndex} is ignored here because its Finish flag is already true.`,
+          need: [...need[processIndex]],
+          workBefore,
+          workAfter: [...work],
+          release: Array.from({ length: work.length }, () => 0),
+          finishBefore,
+          finishAfter: [...finish],
+          finishSummary: formatFinish(finish),
+          resourceChecks: [],
+          blockedBy: [],
+        });
+        continue;
+      }
+
+      const resourceChecks = buildResourceChecks(need[processIndex], work);
+      const blockedBy = resourceChecks.filter(check => !check.satisfied);
+      const canExecute = blockedBy.length === 0;
+
+      if (!canExecute) {
+        evaluations.push({
+          kind: 'blocked',
+          pass,
+          process: processIndex,
+          title: `P${processIndex} cannot run yet`,
+          summary: `P${processIndex} is blocked in pass ${pass}.`,
+          explanation: buildBlockedExplanation(processIndex, blockedBy),
+          need: [...need[processIndex]],
+          workBefore,
+          workAfter: [...work],
+          release: Array.from({ length: work.length }, () => 0),
+          finishBefore,
+          finishAfter: [...finish],
+          finishSummary: formatFinish(finish),
+          resourceChecks,
+          blockedBy,
+        });
+        continue;
+      }
 
       for (let resourceIndex = 0; resourceIndex < work.length; resourceIndex += 1) {
         work[resourceIndex] += allocation[processIndex][resourceIndex];
@@ -76,8 +138,18 @@ export function runSafetyAlgorithm({ allocation, maximum, available }) {
       finish[processIndex] = true;
       safeSequence.push(processIndex);
 
-      steps.push({
+      const step = {
+        kind: 'execute',
+        pass,
+        sequencePosition: safeSequence.length,
         process: processIndex,
+        title: `P${processIndex} can complete`,
+        summary: `P${processIndex} runs in pass ${pass} and releases its allocated resources.`,
+        explanation: buildExecutionExplanation(
+          processIndex,
+          resourceChecks,
+          allocation[processIndex]
+        ),
         need: [...need[processIndex]],
         release: [...allocation[processIndex]],
         workBefore,
@@ -85,29 +157,75 @@ export function runSafetyAlgorithm({ allocation, maximum, available }) {
         finishBefore,
         finishAfter: [...finish],
         finishSummary: formatFinish(finish),
-      });
+        resourceChecks,
+        blockedBy: [],
+      };
 
+      steps.push(step);
+      evaluations.push(step);
       progressed = true;
     }
+
+    pass += 1;
   }
 
   const blockedProcesses = finish
     .map((done, processIndex) => (done ? -1 : processIndex))
     .filter(processIndex => processIndex >= 0);
 
+  if (blockedProcesses.length > 0) {
+    evaluations.push({
+      kind: 'stall',
+      pass: Math.max(1, pass - 1),
+      process: null,
+      title: 'System reaches an unsafe stopping point',
+      summary: 'No remaining process can satisfy Need <= Work.',
+      explanation: `The algorithm stops here because ${blockedProcesses
+        .map(processIndex => `P${processIndex}`)
+        .join(', ')} still need resources that are not currently available.`,
+      need: [],
+      release: [],
+      workBefore: [...work],
+      workAfter: [...work],
+      finishBefore: [...finish],
+      finishAfter: [...finish],
+      finishSummary: formatFinish(finish),
+      resourceChecks: [],
+      blockedBy: [],
+      blockedProcesses,
+    });
+  }
+
   return {
     isSafe: blockedProcesses.length === 0,
     safeSequence,
     blockedProcesses,
     steps,
+    evaluations,
     need,
     finalWork: work,
     finish,
+    passes: Math.max(1, pass - 1),
+  };
+}
+
+function buildDecisionTrailItem(label, passed, detail) {
+  return {
+    label,
+    passed,
+    detail,
   };
 }
 
 export function checkRequest({ allocation, maximum, available, process, request }) {
   const need = calculateNeed(maximum, allocation);
+  const decisionTrail = [
+    buildDecisionTrailItem(
+      'Request is not empty',
+      !request.every(value => value === 0),
+      `Current request vector: [${request.join(', ')}]`
+    ),
+  ];
 
   if (request.every(value => value === 0)) {
     return {
@@ -116,26 +234,68 @@ export function checkRequest({ allocation, maximum, available, process, request 
       process,
       request: [...request],
       message: 'Enter a non-zero request vector before checking.',
+      decisionTrail,
     };
   }
 
-  if (request.some((value, resourceIndex) => value > need[process][resourceIndex])) {
+  const needChecks = request.map((value, resourceIndex) => ({
+    resourceIndex,
+    request: value,
+    remainingNeed: need[process][resourceIndex],
+    passed: value <= need[process][resourceIndex],
+  }));
+
+  const requestWithinNeed = needChecks.every(check => check.passed);
+  decisionTrail.push(
+    buildDecisionTrailItem(
+      `Request stays within P${process}'s remaining need`,
+      requestWithinNeed,
+      needChecks
+        .map(
+          check =>
+            `R${check.resourceIndex}: request ${check.request}, remaining need ${check.remainingNeed}`
+        )
+        .join(' | ')
+    )
+  );
+
+  if (!requestWithinNeed) {
     return {
       granted: false,
       code: 'exceeds-need',
       process,
       request: [...request],
       message: `Request exceeds P${process}'s remaining need.`,
+      decisionTrail,
     };
   }
 
-  if (request.some((value, resourceIndex) => value > available[resourceIndex])) {
+  const availabilityChecks = request.map((value, resourceIndex) => ({
+    resourceIndex,
+    request: value,
+    available: available[resourceIndex],
+    passed: value <= available[resourceIndex],
+  }));
+
+  const requestWithinAvailable = availabilityChecks.every(check => check.passed);
+  decisionTrail.push(
+    buildDecisionTrailItem(
+      'Enough resources are currently available',
+      requestWithinAvailable,
+      availabilityChecks
+        .map(check => `R${check.resourceIndex}: request ${check.request}, available ${check.available}`)
+        .join(' | ')
+    )
+  );
+
+  if (!requestWithinAvailable) {
     return {
       granted: false,
       code: 'unavailable',
       process,
       request: [...request],
       message: 'Request cannot be granted immediately because available resources are insufficient.',
+      decisionTrail,
     };
   }
 
@@ -154,6 +314,20 @@ export function checkRequest({ allocation, maximum, available, process, request 
     available: nextAvailable,
   });
 
+  decisionTrail.push(
+    buildDecisionTrailItem(
+      'Tentative allocation keeps the system safe',
+      safetyResult.isSafe,
+      safetyResult.isSafe
+        ? `Safe sequence after granting the request: ${safetyResult.safeSequence
+            .map(processIndex => `P${processIndex}`)
+            .join(' -> ')}`
+        : `Blocked after tentative allocation: ${safetyResult.blockedProcesses
+            .map(processIndex => `P${processIndex}`)
+            .join(', ')}`
+    )
+  );
+
   if (!safetyResult.isSafe) {
     return {
       granted: false,
@@ -161,6 +335,7 @@ export function checkRequest({ allocation, maximum, available, process, request 
       process,
       request: [...request],
       message: 'Granting this request would leave the system in an unsafe state.',
+      decisionTrail,
       safetyResult,
     };
   }
@@ -170,7 +345,8 @@ export function checkRequest({ allocation, maximum, available, process, request 
     code: 'granted',
     process,
     request: [...request],
-    message: `Request approved for P${process}. Allocation and Need were updated.`,
+    message: `Request approved for P${process}. Allocation, Available, and Need were updated.`,
+    decisionTrail,
     allocation: nextAllocation,
     available: nextAvailable,
     safetyResult,

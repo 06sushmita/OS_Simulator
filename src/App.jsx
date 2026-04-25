@@ -55,8 +55,8 @@ export default function App() {
   const [requestVector, setRequestVector] = useState(initial.requestVector);
   const [safetyResult, setSafetyResult] = useState(initial.safetyResult);
   const [requestResult, setRequestResult] = useState(null);
-  const [activeStep, setActiveStep] = useState(
-    initial.safetyResult.steps.length > 0 ? 0 : -1
+  const [activeTraceIndex, setActiveTraceIndex] = useState(
+    initial.safetyResult.evaluations.length > 0 ? 0 : -1
   );
   const [updatedCells, setUpdatedCells] = useState([]);
   const [updatedAvailable, setUpdatedAvailable] = useState([]);
@@ -77,14 +77,14 @@ export default function App() {
   });
 
   const currentProcess =
-    activeStep >= 0 && safetyResult?.steps?.[activeStep]
-      ? safetyResult.steps[activeStep].process
+    activeTraceIndex >= 0 && safetyResult?.evaluations?.[activeTraceIndex]
+      ? safetyResult.evaluations[activeTraceIndex].process
       : null;
 
   const clearComputedState = () => {
     setSafetyResult(null);
     setRequestResult(null);
-    setActiveStep(-1);
+    setActiveTraceIndex(-1);
     setUpdatedCells([]);
     setUpdatedAvailable([]);
   };
@@ -115,7 +115,7 @@ export default function App() {
     setRequestVector(next.requestVector);
     setSafetyResult(next.safetyResult);
     setRequestResult(null);
-    setActiveStep(next.safetyResult.steps.length > 0 ? 0 : -1);
+    setActiveTraceIndex(next.safetyResult.evaluations.length > 0 ? 0 : -1);
     setUpdatedCells([]);
     setUpdatedAvailable([]);
   };
@@ -169,7 +169,7 @@ export default function App() {
     const result = runSafetyAlgorithm({ allocation, maximum, available });
     setSafetyResult(result);
     setRequestResult(null);
-    setActiveStep(result.steps.length > 0 ? 0 : -1);
+    setActiveTraceIndex(result.evaluations.length > 0 ? 0 : -1);
     setUpdatedCells([]);
     setUpdatedAvailable([]);
   };
@@ -191,8 +191,8 @@ export default function App() {
     setRequestResult(result);
 
     if (!result.granted) {
-      setSafetyResult(baselineResult);
-      setActiveStep(baselineResult.steps.length > 0 ? 0 : -1);
+      setSafetyResult(result.safetyResult ?? baselineResult);
+      setActiveTraceIndex((result.safetyResult ?? baselineResult).evaluations.length > 0 ? 0 : -1);
       setUpdatedCells([]);
       setUpdatedAvailable([]);
       return;
@@ -202,7 +202,7 @@ export default function App() {
     setAvailable(result.available);
     setRequestVector(Array.from({ length: m }, () => 0));
     setSafetyResult(result.safetyResult);
-    setActiveStep(result.safetyResult.steps.length > 0 ? 0 : -1);
+    setActiveTraceIndex(result.safetyResult.evaluations.length > 0 ? 0 : -1);
     setUpdatedCells([
       ...makeHighlightKeys(result.process, result.request, 'allocation'),
       ...makeHighlightKeys(result.process, result.request, 'need'),
@@ -219,10 +219,23 @@ export default function App() {
       <Header
         theme={theme}
         onToggleTheme={() => setTheme(current => (current === 'dark' ? 'light' : 'dark'))}
+        processCount={n}
+        resourceCount={m}
+        result={safetyResult}
       />
 
       <div className="dashboard-layout">
-        <aside className="dashboard-column">
+        <section className="workspace workspace--input">
+          <div className="workspace-heading">
+            <div>
+              <p className="section-kicker">Workspace A</p>
+              <h2>Input Builder</h2>
+            </div>
+            <p className="workspace-copy">
+              Everything in this column is editable input data for the current system snapshot.
+            </p>
+          </div>
+
           <InputPanel
             n={n}
             m={m}
@@ -240,68 +253,84 @@ export default function App() {
             onCheckRequest={checkResourceRequest}
             onReset={loadDemo}
           />
-        </aside>
 
-        <main className="dashboard-column dashboard-column--wide">
-          <div className="matrix-stack">
-            <MatrixTable
-              title="Allocation Matrix"
-              description="Resources currently allocated to each process."
-              matrixKey="allocation"
-              rows={n}
-              cols={m}
-              data={allocation}
-              editable
-              onChange={updateAllocationCell}
-              activeProcess={currentProcess}
-              updatedCells={updatedCells}
-              invalidCells={validation.matrixErrors}
-            />
-            <MatrixTable
-              title="Max Matrix"
-              description="Maximum claim declared by each process."
-              matrixKey="max"
-              rows={n}
-              cols={m}
-              data={maximum}
-              editable
-              onChange={updateMaximumCell}
-              activeProcess={currentProcess}
-              updatedCells={[]}
-              invalidCells={validation.matrixErrors}
-            />
-            <MatrixTable
-              title="Need Matrix"
-              description="Remaining demand calculated as Max - Allocation."
-              matrixKey="need"
-              rows={n}
-              cols={m}
-              data={need}
-              activeProcess={currentProcess}
-              updatedCells={updatedCells}
-              invalidCells={[]}
-            />
-            <AllocationGraph
-              allocation={allocation}
-              need={need}
-              requestProcess={requestProcess}
-              requestVector={requestVector}
-              activeProcess={currentProcess}
-            />
+          <MatrixTable
+            title="Allocation Matrix"
+            description="How many instances of each resource are currently assigned to each process."
+            matrixKey="allocation"
+            rows={n}
+            cols={m}
+            data={allocation}
+            editable
+            onChange={updateAllocationCell}
+            activeProcess={currentProcess}
+            updatedCells={updatedCells}
+            invalidCells={validation.matrixErrors}
+            badgeLabel="Input"
+            badgeTone="input"
+          />
+
+          <MatrixTable
+            title="Max Matrix"
+            description="The maximum claim that each process may request during execution."
+            matrixKey="max"
+            rows={n}
+            cols={m}
+            data={maximum}
+            editable
+            onChange={updateMaximumCell}
+            activeProcess={currentProcess}
+            updatedCells={[]}
+            invalidCells={validation.matrixErrors}
+            badgeLabel="Input"
+            badgeTone="input"
+          />
+        </section>
+
+        <section className="workspace workspace--output">
+          <div className="workspace-heading">
+            <div>
+              <p className="section-kicker">Workspace B</p>
+              <h2>Simulation Output</h2>
+            </div>
+            <p className="workspace-copy">
+              This column is generated by the simulator and explains the system state step by
+              step.
+            </p>
           </div>
-        </main>
 
-        <aside className="dashboard-column">
           <ResultsPanel
             result={safetyResult}
             requestResult={requestResult}
             processCount={n}
-            activeStep={activeStep}
-            onStepChange={setActiveStep}
+            activeStep={activeTraceIndex}
+            onStepChange={setActiveTraceIndex}
             updatedAvailable={updatedAvailable}
             available={available}
           />
-        </aside>
+
+          <MatrixTable
+            title="Need Matrix"
+            description="Derived automatically as Max - Allocation. This is what each process still needs before it can finish."
+            matrixKey="need"
+            rows={n}
+            cols={m}
+            data={need}
+            activeProcess={currentProcess}
+            updatedCells={updatedCells}
+            invalidCells={[]}
+            badgeLabel="Derived"
+            badgeTone="derived"
+          />
+
+          <AllocationGraph
+            allocation={allocation}
+            need={need}
+            requestProcess={requestProcess}
+            requestVector={requestVector}
+            activeProcess={currentProcess}
+          />
+        </section>
       </div>
     </div>
   );

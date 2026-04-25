@@ -24,6 +24,18 @@ function NumberField({
   );
 }
 
+function GuideStep({ index, title, copy }) {
+  return (
+    <div className="guide-step">
+      <span className="guide-step__index">{index}</span>
+      <div>
+        <p className="guide-step__title">{title}</p>
+        <p className="guide-step__copy">{copy}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function InputPanel({
   n,
   m,
@@ -46,13 +58,40 @@ export default function InputPanel({
 
   return (
     <div className="panel-stack">
-      <section className="panel-card">
+      <section className="panel-card panel-card--input">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Input Controls</p>
-            <h2>System Configuration</h2>
+            <p className="section-kicker">Input Workspace</p>
+            <h2>Simulation Controls</h2>
           </div>
-          <span className="mini-pill">Resizable</span>
+          <span className="mini-pill mini-pill--input">Editable</span>
+        </div>
+
+        <div className="guide-stack">
+          <GuideStep
+            index="1"
+            title="Set the size of the system"
+            copy="Choose how many processes and resource types your example should contain."
+          />
+          <GuideStep
+            index="2"
+            title="Fill the matrices and vectors"
+            copy="Allocation and Max are your inputs. Available and Request define the current snapshot."
+          />
+          <GuideStep
+            index="3"
+            title="Run the narrated simulation"
+            copy="The simulator will explain every check in order, including blocked processes."
+          />
+        </div>
+      </section>
+
+      <section className="panel-card panel-card--input">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">Configuration</p>
+            <h2>System Dimensions</h2>
+          </div>
         </div>
 
         <div className="field-grid">
@@ -77,15 +116,14 @@ export default function InputPanel({
         </div>
 
         <p className="helper-text">
-          Adjust dimensions to resize the matrices while preserving existing values where
-          possible.
+          Resizing keeps existing values where possible, so you can iterate on examples quickly.
         </p>
       </section>
 
-      <section className="panel-card">
+      <section className="panel-card panel-card--input">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Resource Vector</p>
+            <p className="section-kicker">Input Vector</p>
             <h2>Available Resources</h2>
           </div>
         </div>
@@ -105,16 +143,17 @@ export default function InputPanel({
         </div>
 
         <p className="helper-text">
-          This is the current Work vector used as the starting point for the safety check.
+          This vector becomes the initial Work value when the safety simulation begins.
         </p>
       </section>
 
-      <section className="panel-card">
+      <section className="panel-card panel-card--input">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Request Validation</p>
-            <h2>Resource Request</h2>
+            <p className="section-kicker">Input Vector</p>
+            <h2>Request Check</h2>
           </div>
+          <span className="mini-pill">Optional</span>
         </div>
 
         <label className="field" htmlFor="request-process">
@@ -160,11 +199,11 @@ export default function InputPanel({
         >
           {requestResult
             ? requestResult.message
-            : 'Enter a request vector and use Check Request to test whether it can be granted safely.'}
+            : 'Use this section to test whether a new request can be granted without breaking safety.'}
         </p>
       </section>
 
-      <section className="panel-card panel-card--compact">
+      <section className="panel-card panel-card--compact panel-card--input">
         <div className="action-row">
           <button
             type="button"
@@ -172,7 +211,7 @@ export default function InputPanel({
             disabled={hasValidationErrors}
             onClick={onRun}
           >
-            Run Algorithm
+            Run Simulation
           </button>
           <button
             type="button"
@@ -183,7 +222,7 @@ export default function InputPanel({
             Check Request
           </button>
           <button type="button" className="button button--ghost" onClick={onReset}>
-            Reset
+            Load Demo
           </button>
         </div>
 
@@ -196,7 +235,7 @@ export default function InputPanel({
             ))
           ) : (
             <p className="validation-list__item validation-list__item--ok">
-              Inputs are valid and ready for simulation.
+              Inputs are valid and ready for a step-by-step simulation.
             </p>
           )}
         </div>
