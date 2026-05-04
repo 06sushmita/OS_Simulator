@@ -13,11 +13,36 @@ body,
   min-height: 100%;
 }
 
+html,
 body {
   margin: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html {
   background:
     radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 25%),
     linear-gradient(180deg, #020617 0%, #0f172a 34%, #111827 100%);
+}
+
+body {
+  background:
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 25%),
+    linear-gradient(180deg, #020617 0%, #0f172a 34%, #111827 100%);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 * {
@@ -96,4 +121,13 @@ input[type='number'] {
   100% {
     transform: translate3d(0, 0, 0);
   }
+}
+
+.process-sidebar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.process-sidebar::-webkit-scrollbar {
+  display: none;
 }

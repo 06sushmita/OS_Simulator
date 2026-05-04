@@ -26,6 +26,8 @@ export default function App() {
       key={1}
       processCountInput={state.processCountInput}
       processes={state.processes}
+      resources={state.resources}
+      allocationMatrix={state.allocationMatrix}
       setProcessCountInput={state.setProcessCountInput}
       generateProcesses={state.generateProcesses}
       nextStep={state.nextStep}
@@ -114,13 +116,13 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#020617_0%,#0f172a_35%,#111827_100%)] px-4 py-6 text-slate-100 md:px-6 xl:px-8">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#020617_0%,#0f172a_35%,#111827_100%)] px-4 py-4 text-slate-100 md:px-6 xl:px-8">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.15),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(34,197,94,0.1),transparent_24%)]" />
-      <StepProgressBar currentStep={state.currentStep} onJump={state.setCurrentStep} />
+      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col">
+        <StepProgressBar currentStep={state.currentStep} onJump={state.setCurrentStep} />
 
-      <div className="relative mx-auto max-w-7xl">
         <AnimatePresence mode="wait">
-          <motion.div key={state.currentStep} {...pageTransition}>
+          <motion.div key={state.currentStep} {...pageTransition} className="flex-1">
             {steps[state.currentStep]}
           </motion.div>
         </AnimatePresence>
