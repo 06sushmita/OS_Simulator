@@ -13,10 +13,10 @@ export default function ProcessCard({ process, selectable = false, selected = fa
       whileHover={{ y: -4, scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
       onClick={selectable ? onSelect : undefined}
-      className={`glass-panel group relative overflow-hidden rounded-3xl border p-5 text-left ${
+      className={`glass-panel group relative overflow-hidden rounded-[12px] border p-5 text-left ${
         selected
           ? 'border-blue-400/70 shadow-[0_0_22px_rgba(59,130,246,0.22)]'
-          : 'border-white/10'
+          : 'border-white/8'
       } ${
         process.active === false ? 'opacity-55' : ''
       }`}

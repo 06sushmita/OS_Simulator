@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import RAGCanvas from '../RAGCanvas';
+import StepActionBar from '../StepActionBar';
 import StepHeader from '../StepHeader';
 
 export default function Step5_SafetyCheck({
@@ -15,23 +17,30 @@ export default function Step5_SafetyCheck({
   startSimulation,
   setCurrentStep,
   previousStep,
-  historyPanel,
   isSavingHistory,
 }) {
   const blocked = [...new Set(simulationSteps.filter((step) => !step.canProceed).map((step) => step.process))];
+  const hasSafeSequence = isSafe && Array.isArray(safeSequence) && safeSequence.length > 0;
+
+  useEffect(() => {
+    if (hasSafeSequence) {
+      startSimulation();
+    }
+  }, [hasSafeSequence, startSimulation]);
 
   return (
-    <div className="space-y-6">
-      <StepHeader step="5" title="Safety Status Check">
+    <div className="space-y-24">
+      <StepHeader
+        step="5"
+        title="Safety Status Check"
+        description="Evaluate the current matrices with Banker's Algorithm and inspect the first blocked process directly on the graph."
+      >
         <div className="flex flex-col items-start gap-3 xl:items-end">
-          <p className="max-w-md text-sm text-slate-400 xl:text-right">
-            Evaluate the current matrices with Banker's Algorithm and inspect the first blocked process directly on the graph.
-          </p>
           <button
             type="button"
             onClick={runSafetyCheck}
             disabled={isSavingHistory}
-            className="rounded-full border border-blue-400/50 bg-blue-500 px-7 py-3 font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.35)] disabled:cursor-not-allowed disabled:opacity-70"
+            className="nav-button nav-button--primary"
           >
             {isSavingHistory ? 'Saving And Checking...' : 'Check Safe Status'}
           </button>
@@ -53,7 +62,7 @@ export default function Step5_SafetyCheck({
         <motion.div
           initial={{ scale: 0.92, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className={`glass-panel rounded-[2rem] border p-8 text-center ${
+          className={`glass-panel ui-card text-center ${
             isSafe
               ? 'border-emerald-400/35 bg-emerald-500/10 shadow-[0_0_26px_rgba(34,197,94,0.18)]'
               : 'border-rose-400/35 bg-rose-500/10 shadow-[0_0_26px_rgba(239,68,68,0.18)]'
@@ -80,9 +89,9 @@ export default function Step5_SafetyCheck({
                   </span>
                 ))}
               </div>
-              <button type="button" onClick={startSimulation} className="mt-8 rounded-full border border-emerald-400/35 bg-emerald-500 px-7 py-3 font-semibold text-slate-950">
-                Begin Simulation
-              </button>
+              <p className="mt-8 text-sm text-emerald-100/85">
+                Safe sequence found. Opening the simulation automatically.
+              </p>
             </>
           ) : (
             <button type="button" onClick={() => setCurrentStep(7)} className="mt-8 rounded-full border border-rose-400/35 bg-rose-500 px-7 py-3 font-semibold text-white">
@@ -91,22 +100,12 @@ export default function Step5_SafetyCheck({
           )}
         </motion.div>
       )}
-
-      {historyPanel}
-
-      <div className="flex justify-between">
-        <button type="button" onClick={previousStep} className="nav-button">
-          Back
-        </button>
-        <button
-          type="button"
-          onClick={() => (isSafe ? startSimulation() : setCurrentStep(7))}
-          disabled={isSafe === null}
-          className="nav-button nav-button--primary disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSafe ? 'Go To Simulation' : 'Go To Recovery'}
-        </button>
-      </div>
+      <StepActionBar
+        onBack={previousStep}
+        onNext={() => (isSafe ? startSimulation() : setCurrentStep(7))}
+        nextDisabled={isSafe === null}
+        nextLabel={isSafe ? 'Open Simulation' : 'Go To Recovery'}
+      />
     </div>
   );
 }

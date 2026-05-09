@@ -9,13 +9,13 @@ const typeClasses = {
 
 export default function MessageLog({ entries }) {
   return (
-    <div className="glass-panel flex h-full min-h-[28rem] flex-col rounded-3xl border border-white/10">
+    <div className="glass-panel flex min-h-[28rem] max-h-[32rem] flex-col overflow-hidden rounded-3xl border border-white/10 xl:max-h-[calc(100vh-14rem)]">
       <div className="border-b border-white/10 px-5 py-4">
         <h3 className="text-lg font-semibold text-slate-100">Message Log</h3>
         <p className="mt-1 text-sm text-slate-400">Live system narration with step timestamps.</p>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4 font-mono text-sm">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 pr-3 font-mono text-sm">
         <AnimatePresence initial={false}>
           {entries.map((entry) => (
             <motion.div

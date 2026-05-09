@@ -20,6 +20,8 @@ const MIN_PROCESSES = 1;
 const MAX_PROCESSES = 10;
 const MIN_RESOURCES = 1;
 const MAX_RESOURCES = 5;
+const MIN_RESOURCE_INSTANCES = 1;
+const MAX_RESOURCE_INSTANCES = 10;
 
 function createProcesses(count) {
   return Array.from({ length: count }, (_, index) => ({
@@ -77,7 +79,7 @@ function computeAvailableVector(resources, allocationMatrix) {
       (sum, row) => sum + Number(row[resourceIndex] ?? 0),
       0
     );
-    return resource.totalInstances - allocated;
+    return Number(resource.totalInstances ?? 0) - allocated;
   });
 }
 
@@ -91,8 +93,37 @@ function getColumnAllocationTotal(matrix, colIndex, excludeRowIndex = -1) {
   }, 0);
 }
 
-function validateMatrices(processes, resources, allocationMatrix, maxMatrix) {
+function parseMatrixInput(value) {
+  const digitsOnly = String(value ?? '').replace(/\D/g, '');
+
+  if (!digitsOnly) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(10, Number(digitsOnly) || 0));
+}
+
+function validateResources(resources) {
   const errors = {};
+
+  resources.forEach((resource, colIndex) => {
+    const totalInstances = Number(resource.totalInstances ?? 0);
+
+    if (
+      !Number.isFinite(totalInstances) ||
+      totalInstances < MIN_RESOURCE_INSTANCES ||
+      totalInstances > MAX_RESOURCE_INSTANCES
+    ) {
+      errors[`resource-range-${colIndex}`] =
+        `Resource total must be between ${MIN_RESOURCE_INSTANCES} and ${MAX_RESOURCE_INSTANCES}.`;
+    }
+  });
+
+  return errors;
+}
+
+function validateMatrices(processes, resources, allocationMatrix, maxMatrix) {
+  const errors = validateResources(resources);
 
   processes.forEach((process, rowIndex) => {
     if (process.active === false) {
@@ -115,7 +146,7 @@ function validateMatrices(processes, resources, allocationMatrix, maxMatrix) {
         errors[`max-${rowIndex}-${colIndex}`] = 'Values cannot be negative.';
       }
 
-      if (max > resource.totalInstances) {
+      if (max > Number(resource.totalInstances ?? 0)) {
         errors[`max-${rowIndex}-${colIndex}`] =
           'A process cannot claim more than the total resource instances.';
       }
@@ -128,7 +159,7 @@ function validateMatrices(processes, resources, allocationMatrix, maxMatrix) {
       0
     );
 
-    if (allocated > resource.totalInstances) {
+    if (allocated > Number(resource.totalInstances ?? 0)) {
       errors[`resource-total-${colIndex}`] =
         'Allocated instances exceed the configured resource total.';
     }
@@ -190,6 +221,118 @@ function buildSimulationFrames({ processes, resources, allocationMatrix, maxMatr
   return frames;
 }
 
+function buildDetailedSimulationFrames({
+  processes,
+  resources,
+  allocationMatrix,
+  maxMatrix,
+  availableVector,
+  algorithmResult,
+}) {
+  const frames = [
+    {
+      index: 0,
+      currentProcess: null,
+      currentWork: [...availableVector],
+      completedProcessIds: [],
+      allocationMatrix: cloneMatrix(allocationMatrix),
+      needMatrix: buildNeedMatrix(maxMatrix, allocationMatrix),
+      message: createMessage(
+        0,
+        '->',
+        'Simulation initialized. Use Play or Next to walk through the safe sequence.',
+        'info'
+      ),
+    },
+  ];
+
+  const runningAllocation = cloneMatrix(allocationMatrix);
+  const runningNeed = buildNeedMatrix(maxMatrix, allocationMatrix);
+  const completedProcessIds = [];
+
+  let work = [...availableVector];
+  let frameIndex = 1;
+
+  for (const step of algorithmResult.steps.filter((item) => item.canProceed)) {
+    runningNeed[step.processIndex] = runningNeed[step.processIndex].map(() => 0);
+
+    const allocatedResources = step.allocation
+      .map((value, resourceIndex) => ({
+        resource: resources[resourceIndex],
+        resourceIndex,
+        value: Number(value ?? 0),
+      }))
+      .filter((entry) => entry.value > 0);
+
+    if (allocatedResources.length === 0) {
+      completedProcessIds.push(step.process);
+      work = [...step.workAfter];
+
+      frames.push({
+        index: frameIndex,
+        currentProcess: step.process,
+        currentWork: [...work],
+        completedProcessIds: [...completedProcessIds],
+        allocationMatrix: cloneMatrix(runningAllocation),
+        needMatrix: cloneMatrix(runningNeed),
+        message: createMessage(
+          frameIndex,
+          'OK',
+          `${step.process}: Need [${step.need.join(', ')}] <= Work [${step.work.join(', ')}]. Process completed with no held resources to release.`,
+          'success'
+        ),
+      });
+
+      frameIndex += 1;
+      continue;
+    }
+
+    for (const { resource, resourceIndex, value } of allocatedResources) {
+      runningAllocation[step.processIndex][resourceIndex] = 0;
+      work[resourceIndex] += value;
+
+      frames.push({
+        index: frameIndex,
+        currentProcess: step.process,
+        currentWork: [...work],
+        completedProcessIds: [...completedProcessIds],
+        allocationMatrix: cloneMatrix(runningAllocation),
+        needMatrix: cloneMatrix(runningNeed),
+        message: createMessage(
+          frameIndex,
+          '->',
+          `${step.process} released ${value} instance${value > 1 ? 's' : ''} of ${resource.id}. The allocation arrow to ${resource.id} has been removed.`,
+          'info'
+        ),
+      });
+
+      frameIndex += 1;
+    }
+
+    completedProcessIds.push(step.process);
+    work = [...step.workAfter];
+
+    frames.push({
+      index: frameIndex,
+      currentProcess: step.process,
+      currentWork: [...work],
+      completedProcessIds: [...completedProcessIds],
+      allocationMatrix: cloneMatrix(runningAllocation),
+      needMatrix: cloneMatrix(runningNeed),
+      message: createMessage(
+        frameIndex,
+        'OK',
+        `${step.process}: All held resources have been deallocated. Work is now [${step.workAfter.join(', ')}].`,
+        'success'
+      ),
+    });
+
+    frameIndex += 1;
+  }
+
+  return frames;
+}
+
 function recalculateState(statePatch) {
   const needMatrix = buildNeedMatrix(statePatch.maxMatrix, statePatch.allocationMatrix);
   const availableVector = computeAvailableVector(statePatch.resources, statePatch.allocationMatrix);
@@ -208,6 +351,27 @@ function recalculateState(statePatch) {
   };
 }
 
+function normalizeLoadedProcesses(processes = []) {
+  return processes.map((process, index) => ({
+    id: `P${index}`,
+    name: process.name || `Process ${index}`,
+    priority: Math.max(1, Math.min(10, Number(process.priority ?? 1) || 1)),
+    active: process.active !== false,
+    status: process.status || 'ready',
+  }));
+}
+
+function normalizeLoadedResources(resources = []) {
+  return resources.map((resource, index) => ({
+    id: `R${index}`,
+    name: resource.name || `R${index}`,
+    totalInstances: Math.max(
+      MIN_RESOURCE_INSTANCES,
+      Math.min(MAX_RESOURCE_INSTANCES, Number(resource.totalInstances ?? 1) || 1)
+    ),
+  }));
+}
+
 const initialProcesses = createProcesses(3);
 const initialResources = createResources(3);
 const initialState = recalculateState({
@@ -222,6 +386,7 @@ const initialState = recalculateState({
   availableVector: [],
   validationErrors: {},
   isSafe: null,
+  blockedProcessIds: [],
   safeSequence: null,
   simulationSteps: [],
   simulationFrames: [],
@@ -257,6 +422,7 @@ export const useSimulationStore = create((set, get) => ({
         allocationMatrix,
         maxMatrix,
         isSafe: null,
+        blockedProcessIds: [],
         safeSequence: null,
         simulationSteps: [],
         simulationFrames: [],
@@ -279,6 +445,7 @@ export const useSimulationStore = create((set, get) => ({
         allocationMatrix: createZeroMatrix(processes.length, resources.length),
         maxMatrix: createZeroMatrix(processes.length, resources.length),
         isSafe: null,
+        blockedProcessIds: [],
         safeSequence: null,
         simulationSteps: [],
         simulationFrames: [],
@@ -306,6 +473,7 @@ export const useSimulationStore = create((set, get) => ({
         allocationMatrix: createZeroMatrix(state.processes.length, resources.length),
         maxMatrix: createZeroMatrix(state.processes.length, resources.length),
         isSafe: null,
+        blockedProcessIds: [],
         safeSequence: null,
         simulationSteps: [],
         simulationFrames: [],
@@ -325,7 +493,7 @@ export const useSimulationStore = create((set, get) => ({
               ...resource,
               [field]:
                 field === 'totalInstances'
-                  ? Math.max(1, Math.min(10, Number(value) || 0))
+                  ? Number(value)
                   : value || `R${resourceIndex}`,
             }
           : resource
@@ -341,7 +509,7 @@ export const useSimulationStore = create((set, get) => ({
 
   updateMatrixValue: (matrixName, rowIndex, colIndex, value) =>
     set((state) => {
-      const requestedValue = Math.max(0, Math.min(10, Number(value) || 0));
+      const requestedValue = parseMatrixInput(value);
       const nextAllocationMatrix = cloneMatrix(state.allocationMatrix);
       const nextMaxMatrix = cloneMatrix(state.maxMatrix);
       const resourceTotal = Number(state.resources[colIndex]?.totalInstances ?? 0);
@@ -368,6 +536,7 @@ export const useSimulationStore = create((set, get) => ({
         allocationMatrix: nextAllocationMatrix,
         maxMatrix: nextMaxMatrix,
         isSafe: null,
+        blockedProcessIds: [],
         safeSequence: null,
         simulationSteps: [],
         simulationFrames: [],
@@ -378,10 +547,50 @@ export const useSimulationStore = create((set, get) => ({
       });
     }),
 
+  loadScenarioSnapshot: (snapshot) =>
+    set((state) => {
+      const processes = normalizeLoadedProcesses(snapshot?.processes);
+      const resources = normalizeLoadedResources(snapshot?.resources);
+      const processCount = processes.length || initialState.processes.length;
+      const resourceCount = resources.length || initialState.resources.length;
+      const normalizedProcesses =
+        processes.length > 0 ? processes : normalizeLoadedProcesses(initialState.processes);
+      const normalizedResources =
+        resources.length > 0 ? resources : normalizeLoadedResources(initialState.resources);
+      const allocationMatrix = resizeMatrix(
+        snapshot?.allocationMatrix || [],
+        processCount,
+        resourceCount
+      );
+      const maxMatrix = resizeMatrix(snapshot?.maxMatrix || [], processCount, resourceCount);
+
+      return recalculateState({
+        ...state,
+        currentStep: 3,
+        processCountInput: processCount,
+        resourceCountInput: resourceCount,
+        processes: normalizedProcesses,
+        resources: normalizedResources,
+        allocationMatrix,
+        maxMatrix,
+        isSafe: null,
+        blockedProcessIds: [],
+        safeSequence: null,
+        simulationSteps: [],
+        simulationFrames: [],
+        currentSimStep: 0,
+        isPlaying: false,
+        recoveryMode: null,
+        messageLog: [],
+        resourcesLocked: false,
+      });
+    }),
+
   runSafetyCheck: () =>
     set((state) => {
       if (Object.keys(state.validationErrors).length > 0) {
         return {
+          blockedProcessIds: [],
           messageLog: [
             createMessage(
               state.messageLog.length + 1,
@@ -421,10 +630,11 @@ export const useSimulationStore = create((set, get) => ({
 
       return {
         isSafe: result.isSafe,
+        blockedProcessIds: result.blockedProcesses,
         safeSequence: result.safeSequence,
         simulationSteps: result.steps,
         simulationFrames: result.isSafe
-          ? buildSimulationFrames({
+          ? buildDetailedSimulationFrames({
               processes: state.processes,
               resources: state.resources,
               allocationMatrix: state.allocationMatrix,
@@ -514,21 +724,25 @@ export const useSimulationStore = create((set, get) => ({
         resources: recalculated.resources,
       });
 
+      const simulationFrames = result.isSafe
+        ? buildDetailedSimulationFrames({
+            processes: recalculated.processes,
+            resources: recalculated.resources,
+            allocationMatrix: recalculated.allocationMatrix,
+            maxMatrix: recalculated.maxMatrix,
+            availableVector: recalculated.availableVector,
+            algorithmResult: result,
+          })
+        : [];
+
       return {
         ...recalculated,
+        currentStep: result.isSafe ? 6 : state.currentStep,
         isSafe: result.isSafe,
+        blockedProcessIds: result.blockedProcesses,
         safeSequence: result.safeSequence,
         simulationSteps: result.steps,
-        simulationFrames: result.isSafe
-          ? buildSimulationFrames({
-              processes: recalculated.processes,
-              resources: recalculated.resources,
-              allocationMatrix: recalculated.allocationMatrix,
-              maxMatrix: recalculated.maxMatrix,
-              availableVector: recalculated.availableVector,
-              algorithmResult: result,
-            })
-          : [],
+        simulationFrames,
         currentSimStep: 0,
         isPlaying: false,
         messageLog: [
@@ -594,14 +808,25 @@ export const useSimulationStore = create((set, get) => ({
       });
 
       const noProcessesRemain = recalculated.processes.every((process) => process.active === false);
+      const simulationFrames = result.isSafe
+        ? buildDetailedSimulationFrames({
+            processes: recalculated.processes,
+            resources: recalculated.resources,
+            allocationMatrix: recalculated.allocationMatrix,
+            maxMatrix: recalculated.maxMatrix,
+            availableVector: recalculated.availableVector,
+            algorithmResult: result,
+          })
+        : [];
 
       return {
         ...recalculated,
         isSafe: result.isSafe,
+        blockedProcessIds: result.blockedProcesses,
         safeSequence: result.safeSequence,
         simulationSteps: result.steps,
         simulationFrames: result.isSafe
-          ? buildSimulationFrames({
+          ? buildDetailedSimulationFrames({
               processes: recalculated.processes,
               resources: recalculated.resources,
               allocationMatrix: recalculated.allocationMatrix,

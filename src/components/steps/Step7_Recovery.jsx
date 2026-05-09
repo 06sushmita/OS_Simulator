@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import MessageLog from '../MessageLog';
 import ProcessCard from '../ProcessCard';
 import RAGCanvas from '../RAGCanvas';
+import StepHeader from '../StepHeader';
 
 export default function Step7_Recovery({
   processes,
@@ -10,6 +11,7 @@ export default function Step7_Recovery({
   needMatrix,
   availableVector,
   messageLog,
+  blockedProcessIds,
   setRecoveryMode,
   recoveryMode,
   terminateProcess,
@@ -20,16 +22,15 @@ export default function Step7_Recovery({
   previousStep,
 }) {
   const activeProcesses = processes.filter((process) => process.active !== false);
+  const recoverySucceeded = isSafe === true;
 
   return (
     <div className="space-y-6">
-      <div className="glass-panel rounded-[2rem] border border-white/10 p-8">
-        <p className="text-xs uppercase tracking-[0.34em] text-blue-300/80">Step 7</p>
-        <h2 className="mt-2 text-3xl font-semibold text-slate-50">Recovery Mode</h2>
-        <p className="mt-3 max-w-3xl text-slate-400">
-          Resolve the unsafe state either by terminating selected processes or by automated priority-based preemption.
-        </p>
-      </div>
+      <StepHeader
+        step="7"
+        title="Recovery Mode"
+        description="Resolve the unsafe state either by terminating selected processes or by automated priority-based preemption."
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.8fr]">
         <RAGCanvas
@@ -38,12 +39,15 @@ export default function Step7_Recovery({
           allocationMatrix={allocationMatrix}
           needMatrix={needMatrix}
           availableVector={availableVector}
+          currentProcess={blockedProcessIds?.[0] || null}
+          isSafe={isSafe}
+          blockedProcessIds={blockedProcessIds}
         />
         <MessageLog entries={messageLog} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <motion.div initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} className={`glass-panel rounded-[2rem] border p-6 ${
+        <motion.div initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} className={`glass-panel ui-card border ${
           recoveryMode === 'terminate' ? 'border-blue-400/50' : 'border-white/10'
         }`}>
           <div className="flex items-start justify-between gap-4">
@@ -68,7 +72,7 @@ export default function Step7_Recovery({
           </div>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} className={`glass-panel rounded-[2rem] border p-6 ${
+        <motion.div initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} className={`glass-panel ui-card border ${
           recoveryMode === 'preempt' ? 'border-amber-400/50' : 'border-white/10'
         }`}>
           <div className="flex items-start justify-between gap-4">
@@ -93,20 +97,28 @@ export default function Step7_Recovery({
         </motion.div>
       </div>
 
-      {isSafe && safeSequence && (
-        <div className="glass-panel rounded-[2rem] border border-emerald-400/35 bg-emerald-500/10 p-6">
+      {recoverySucceeded && (
+        <div className="glass-panel ui-card border border-emerald-400/35 bg-emerald-500/10">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h3 className="text-2xl font-semibold text-emerald-100">Recovery Successful</h3>
-              <p className="mt-2 text-emerald-50/80">The system is safe again. Resume with the resulting safe sequence.</p>
+              <p className="mt-2 text-emerald-50/80">
+                The system is safe again. Continue to the simulation to review the recovered state.
+              </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              {safeSequence.map((processId) => (
-                <span key={processId} className="rounded-full border border-emerald-300/25 bg-emerald-500/15 px-4 py-2 text-emerald-50">
-                  {processId}
-                </span>
-              ))}
-            </div>
+            {Array.isArray(safeSequence) && safeSequence.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {safeSequence.map((processId) => (
+                  <span key={processId} className="rounded-full border border-emerald-300/25 bg-emerald-500/15 px-4 py-2 text-emerald-50">
+                    {processId}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50/85">
+                No runnable processes remain after recovery, but the deadlock has been cleared.
+              </div>
+            )}
             <button type="button" onClick={startSimulation} className="nav-button nav-button--primary">
               Proceed To Simulation
             </button>
@@ -115,7 +127,7 @@ export default function Step7_Recovery({
       )}
 
       <div className="flex justify-between">
-        <button type="button" onClick={previousStep} className="nav-button">
+        <button type="button" onClick={previousStep} className="nav-button nav-button--back">
           Back
         </button>
       </div>

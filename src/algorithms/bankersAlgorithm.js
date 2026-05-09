@@ -106,7 +106,7 @@ export function buildRecoverySnapshot({ processes, allocation, max, resources })
       (sum, row) => sum + Number(row[resourceIndex] ?? 0),
       0
     );
-    return Math.max(0, resource.totalInstances - allocated);
+    return Math.max(0, Number(resource.totalInstances ?? 0) - allocated);
   });
 
   return {

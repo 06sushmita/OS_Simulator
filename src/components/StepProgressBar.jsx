@@ -1,66 +1,38 @@
 import { motion } from 'framer-motion';
 import { STEP_LABELS } from '../store/simulationStore';
 
-const statusClasses = {
-  Ready: 'border-white/10 bg-slate-900/70 text-slate-300',
-  Safe: 'border-emerald-400/25 bg-emerald-500/12 text-emerald-200',
-  Unsafe: 'border-rose-400/25 bg-rose-500/12 text-rose-200',
-};
+const STEP_DESCRIPTIONS = [
+  'Configure how many processes participate in the system.',
+  'Set resource types and total instance counts.',
+  'Fill in Max, Allocation, and derived Need values.',
+  'Inspect the live resource-allocation graph.',
+  'Run the safety check and inspect blocked processes.',
+  'Replay the safe execution sequence step by step.',
+  'Apply recovery actions to resolve deadlock.',
+];
 
 export default function StepProgressBar({
   currentStep,
   onJump,
-  processCount,
-  resourceCount,
-  safetyLabel,
-  onRestart,
-  userLabel,
-  onSignOut,
-  isSigningOut,
 }) {
-  const progress = (currentStep / (STEP_LABELS.length - 1)) * 100;
-  const stageNumber = currentStep + 1;
+  const workflowSteps = STEP_LABELS.slice(1);
+  const activeIndex = Math.max(0, currentStep - 1);
+  const progress =
+    workflowSteps.length > 1 ? (activeIndex / (workflowSteps.length - 1)) * 100 : 0;
 
   return (
-    <div className="glass-panel sticky top-4 z-30 mx-auto mb-6 w-full max-w-7xl overflow-hidden rounded-3xl border border-white/10 bg-slate-950/65 px-5 py-4 backdrop-blur-xl">
+    <div className="glass-panel ui-card sticky top-4 z-30 mx-auto mb-6 w-full max-w-7xl overflow-visible bg-slate-950/65 backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.34em] text-blue-300/80">Simulation Flow</p>
-          <h2 className="text-lg font-semibold text-slate-100">Deadlock Detection & Recovery</h2>
+          <p className="ui-kicker">Simulation Flow</p>
+          <h2 className="mt-2 text-[22px] font-semibold text-slate-100">Deadlock Detection & Recovery</h2>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {userLabel ? (
-            <div className="rounded-full border border-white/10 bg-slate-900/70 px-3 py-1 text-sm text-slate-300">
-              {userLabel}
-            </div>
-          ) : null}
-          <div className="rounded-full border border-white/10 bg-slate-900/70 px-3 py-1 text-sm text-slate-300">
-            Stage {stageNumber} / {STEP_LABELS.length}
-          </div>
-          <div
-            className={`rounded-full border px-3 py-1 text-sm ${
-              statusClasses[safetyLabel] || statusClasses.Ready
-            }`}
-          >
-            {safetyLabel}
-          </div>
-          <button type="button" onClick={onRestart} className="nav-button px-4 py-2 text-sm">
-            New Session
-          </button>
-          {onSignOut ? (
-            <button
-              type="button"
-              onClick={onSignOut}
-              disabled={isSigningOut}
-              className="nav-button px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSigningOut ? 'Signing Out...' : 'Logout'}
-            </button>
-          ) : null}
+        <div className="rounded-full border border-white/10 bg-slate-900/72 px-4 py-2 text-sm font-medium text-slate-300">
+          {Math.round(progress)}% complete
         </div>
       </div>
 
-      <div className="relative mb-4 h-2 rounded-full bg-slate-800">
+      <div className="relative mb-4 h-2 rounded-full bg-slate-800/80">
         <motion.div
           className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-green-400 shadow-[0_0_24px_rgba(59,130,246,0.6)]"
           animate={{ width: `${progress}%` }}
@@ -68,26 +40,18 @@ export default function StepProgressBar({
         />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.24em] text-slate-400">
-        <span className="rounded-full border border-white/10 bg-slate-900/60 px-3 py-1">
-          {processCount} processes
-        </span>
-        <span className="rounded-full border border-white/10 bg-slate-900/60 px-3 py-1">
-          {resourceCount} resources
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-        {STEP_LABELS.map((label, index) => {
-          const active = index === currentStep;
-          const reached = index <= currentStep;
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        {workflowSteps.map((label, index) => {
+          const actualStep = index + 1;
+          const active = actualStep === currentStep;
+          const reached = actualStep <= currentStep;
 
           return (
             <button
               key={label}
               type="button"
-              onClick={() => onJump(index)}
-              className={`rounded-2xl border px-3 py-2 text-left transition ${
+              onClick={() => onJump(actualStep)}
+              className={`group relative rounded-[12px] border px-3 py-3 text-left transition ${
                 active
                   ? 'border-blue-400/70 bg-blue-500/12 text-slate-50 shadow-[0_0_18px_rgba(59,130,246,0.25)]'
                   : reached
@@ -96,9 +60,12 @@ export default function StepProgressBar({
               }`}
             >
               <div className="text-[11px] uppercase tracking-[0.25em] text-slate-400">
-                {index + 1}
+                {actualStep}
               </div>
-              <div className="mt-1 text-sm font-medium">{label}</div>
+              <div className="mt-1 text-sm font-semibold">{label}</div>
+              <div className="step-tooltip">
+                {STEP_DESCRIPTIONS[index]}
+              </div>
             </button>
           );
         })}

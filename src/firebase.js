@@ -1,11 +1,5 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
-import {
-  GoogleAuthProvider,
-  browserLocalPersistence,
-  getAuth,
-  setPersistence,
-} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -19,17 +13,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
-
-setPersistence(auth, browserLocalPersistence).catch(() => null);
 
 const analyticsPromise =
   typeof window === 'undefined'
     ? Promise.resolve(null)
     : isSupported()
         .then((supported) => (supported ? getAnalytics(app) : null))
-        .catch(() => null);
+      .catch(() => null);
 
-export { app, auth, db, googleProvider, analyticsPromise };
+export { app, db, analyticsPromise };
