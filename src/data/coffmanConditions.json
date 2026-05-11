@@ -1,0 +1,27 @@
+[
+  {
+    "key": "mutual-exclusion",
+    "label": "Mutual exclusion",
+    "presentDetail": "Resource instances are exclusive once allocated, so another process cannot use the same instance at the same time.",
+    "absentDetail": "No contested resource instances are active in this snapshot."
+  },
+  {
+    "key": "hold-and-wait",
+    "label": "Hold and wait",
+    "presentDetail": "At least one blocked process is holding resources while requesting more.",
+    "waitingWithoutHoldingDetail": "Blocked processes are waiting, but none of them are currently holding another resource.",
+    "absentDetail": "No process is waiting for additional resources right now."
+  },
+  {
+    "key": "no-preemption",
+    "label": "No preemption",
+    "presentDetail": "Allocated resources stay with a process until it finishes unless recovery explicitly intervenes.",
+    "absentDetail": "No process is currently holding resources, so preemption is not part of the failure."
+  },
+  {
+    "key": "circular-wait",
+    "label": "Circular wait",
+    "presentDetail": "Circular wait detected.",
+    "absentDetail": "No closed wait cycle was isolated from the blocked set, but the system is still unsafe because no remaining process can satisfy Need <= Work."
+  }
+]
